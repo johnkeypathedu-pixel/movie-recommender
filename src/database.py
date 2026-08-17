@@ -264,7 +264,9 @@ def list_movies(
     order = {
         "title": "title ASC",
         "rating": "average_rating DESC, rating_count DESC",
-        "year": "release_year DESC NULLS LAST",
+        # SQLite doesn't accept PostgreSQL's `NULLS LAST`; push NULL release
+        # years to the end with an explicit CASE.
+        "year": "CASE WHEN release_year IS NULL THEN 1 ELSE 0 END, release_year DESC",
         "popularity": "rating_count DESC",
     }.get(sort_by, "title ASC")
 

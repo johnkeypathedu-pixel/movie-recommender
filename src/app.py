@@ -15,12 +15,15 @@ from __future__ import annotations
 
 import hashlib
 import os
+import shutil
 from datetime import datetime, timedelta
+from pathlib import Path
 
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
+from streamlit.errors import StreamlitSecretNotFoundError
 
 import database as db
 import recommender as rec
@@ -32,7 +35,28 @@ st.set_page_config(
     layout="wide",
 )
 
-db.init_schema()  # no-op if schema already exists
+
+def _configure_runtime_database() -> None:
+    """Use a writable runtime database while preserving the seeded catalogue."""
+    configured_path = os.environ.get("MRS_DB")
+    try:
+        configured_path = configured_path or st.secrets.get("MRS_DB")
+    except (FileNotFoundError, KeyError, StreamlitSecretNotFoundError):
+        pass
+
+    if not configured_path:
+        return
+
+    seeded_path = Path(__file__).resolve().parents[1] / "data" / "mrs.db"
+    runtime_path = Path(configured_path)
+    runtime_path.parent.mkdir(parents=True, exist_ok=True)
+    if not runtime_path.exists() and seeded_path.exists():
+        shutil.copy2(seeded_path, runtime_path)
+    os.environ["MRS_DB"] = str(runtime_path)
+
+
+_configure_runtime_database()
+db.init_schema()
 
 
 # light-weight password hashing (kept here so demo accounts work without
@@ -60,7 +84,7 @@ def get_admin_key() -> str:
     """
     try:
         return st.secrets["ADMIN_KEY"]
-    except (KeyError, FileNotFoundError):
+    except (KeyError, FileNotFoundError, StreamlitSecretNotFoundError):
         return os.environ.get("ADMIN_KEY", "admin-demo-key")
 
 

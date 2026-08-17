@@ -119,9 +119,11 @@ class RecommendationEngine:
             self.item_ids = np.array([])
             return
 
-        # Title / genre indexes
+        # Title / genre indexes (item_ids must be assigned here so the CF block
+        # below can size its matrices against the actual catalogue).
         self.titles = dict(zip(self.movies_df.movie_id, self.movies_df.title))
         self.genres = dict(zip(self.movies_df.movie_id, self.movies_df.genres))
+        self.item_ids = self.movies_df.movie_id.to_numpy()
 
         # ---- user-item matrix for collaborative filtering ----
         # Build a dense matrix aligned to self.item_ids so the item-item CF
@@ -170,9 +172,6 @@ class RecommendationEngine:
         self.content_item_similarity = _normalise_rows(
             cosine_similarity(self.item_content_matrix)
         )
-
-        # movie id sequence aligns with the matrix rows
-        self.item_ids = self.movies_df.movie_id.to_numpy()
 
     # ---------- preference vector ----------
 

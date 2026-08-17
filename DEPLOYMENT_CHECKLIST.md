@@ -27,6 +27,7 @@ The repository should contain `requirements.txt` at the repository root and the 
 
    ```toml
    ADMIN_KEY = "your-unique-production-key"
+   MRS_DB = "/tmp/mrs.db"
    ```
 
 7. Deploy the app and wait for the build to complete.
