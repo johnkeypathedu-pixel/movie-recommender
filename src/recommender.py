@@ -97,8 +97,10 @@ class RecommendationEngine:
         self.item_ids: np.ndarray = np.array([])
         self.titles: dict[int, str] = {}
         self.genres: dict[int, str] = {}
-        self._item_similarity = None  # sparse, normalised by row
-        self.content_item_similarity = None  # sparse
+        # Item-item similarity rows are computed lazily (see
+        # _content_similarity_row / _cf_similarity_row) rather than as a
+        # precomputed n_items x n_items dense matrix.
+        self._item_matrix_T: np.ndarray | None = None
 
     # ---------- lifecycle ----------
 
@@ -160,18 +162,18 @@ class RecommendationEngine:
             from scipy.sparse import csr_matrix
             self.item_content_matrix = csr_matrix((len(corpus), 1))
 
-        # ---- pre-computed similarity matrices ----
-        # Item-item collaborative: cosine on columns (movies) of the user-item matrix
-        if not self.user_item.empty:
-            cf_matrix = cosine_similarity(self.user_item.T.values)
-            self._item_similarity = _normalise_rows(cf_matrix)
-        else:
-            self._item_similarity = None
-
-        # Item-item content similarity
-        self.content_item_similarity = _normalise_rows(
-            cosine_similarity(self.item_content_matrix)
-        )
+        # ---- similarity rows are computed lazily, not pre-computed in full ----
+        # Item-item collaborative: cosine on columns (movies) of the user-item matrix.
+        # Only kept as a transposed array here; individual rows are derived on
+        # demand by _cf_similarity_row(). For the full MovieLens catalogue
+        # (~9.7k movies) a precomputed n_items x n_items dense matrix is
+        # ~760MB per copy (float64) and exceeded the memory budget on
+        # Streamlit Community Cloud, crashing the app as soon as a
+        # recommendation was requested. Only a handful of rows (one per
+        # rated movie) are ever needed per request, so deriving them lazily
+        # keeps peak memory at O(n_items) instead of O(n_items^2) while
+        # returning identical results.
+        self._item_matrix_T = self.user_item.T.values if not self.user_item.empty else None
 
     # ---------- preference vector ----------
 
@@ -289,7 +291,7 @@ class RecommendationEngine:
             if mid not in idx_by_id:
                 continue
             i = idx_by_id[mid]
-            sim = self.content_item_similarity[i]
+            sim = self._content_similarity_row(i)
             # sim is a dense row
             for j, s in enumerate(sim):
                 c_mid = int(self.item_ids[j])
@@ -338,6 +340,26 @@ class RecommendationEngine:
             )
         return [s.as_dict() for s in out[:k]]
 
+    def _content_similarity_row(self, idx: int) -> np.ndarray:
+        """Cosine similarity of catalogue item `idx` against every item,
+        content-based (genre TF-IDF), L2-normalised to unit length.
+
+        Computed on demand for a single row instead of precomputing the full
+        n_items x n_items matrix — see the note in refresh().
+        """
+        row = cosine_similarity(self.item_content_matrix[idx], self.item_content_matrix)[0]
+        return _normalise_vector(row)
+
+    def _cf_similarity_row(self, idx: int) -> np.ndarray:
+        """Cosine similarity of catalogue item `idx` against every item,
+        collaborative (user-item ratings), L2-normalised to unit length.
+
+        Computed on demand for a single row instead of precomputing the full
+        n_items x n_items matrix — see the note in refresh().
+        """
+        row = cosine_similarity(self._item_matrix_T[idx : idx + 1], self._item_matrix_T)[0]
+        return _normalise_vector(row)
+
     def _cf_user_vector_scores(
         self, user_id: int, idx_by_id: dict[int, int]
     ) -> np.ndarray:
@@ -346,7 +368,7 @@ class RecommendationEngine:
         Aligns to ``self.item_ids`` (every catalogue movie). Movies that
         have no ratings are treated as having a zero rating.
         """
-        if self._item_similarity is None or user_id not in self.user_item.index:
+        if self._item_matrix_T is None or user_id not in self.user_item.index:
             return np.zeros(len(self.item_ids))
         # Build a full-length rating vector aligned with item_ids
         user_col_idx_by_id = {col: i for i, col in enumerate(self.user_item.columns)}
@@ -363,10 +385,10 @@ class RecommendationEngine:
             return np.zeros(len(self.item_ids))
         scores = np.zeros(len(self.item_ids))
         rated_indices = np.where(rated_mask)[0]
-        # vectorised: for each rated item r in rated_indices:
-        #   scores += ratings[r] * sims[r, :]
+        # for each rated item r in rated_indices: scores += ratings[r] * sims[r, :]
+        # (sims[r, :] is derived on demand, not read from a precomputed matrix)
         for ri in rated_indices:
-            scores += full_ratings[ri] * self._item_similarity[ri]
+            scores += full_ratings[ri] * self._cf_similarity_row(int(ri))
         scores = scores / max(1.0, float(rated_mask.sum()))
         return scores
 
@@ -410,6 +432,13 @@ def _normalise_rows(matrix: np.ndarray) -> np.ndarray:
     norms = np.linalg.norm(matrix, axis=1, keepdims=True)
     norms[norms == 0] = 1.0
     return matrix / norms
+
+
+def _normalise_vector(vec: np.ndarray) -> np.ndarray:
+    """Normalise a single similarity row to unit length. Equivalent to one
+    row of _normalise_rows, for callers that derive rows one at a time."""
+    norm = np.linalg.norm(vec)
+    return vec / norm if norm else vec
 
 
 # ---------- module-scope singleton ----------
