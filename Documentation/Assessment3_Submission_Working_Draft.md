@@ -47,7 +47,7 @@ Include these credentials in the final submission so the lecturer can test the a
 
 - **User account:** username `alice`, password `Demo1234!`
 - **Administrator account:** username `admin`, password `AdminPass!23`
-- **Administrator key:** `[Insert the demonstration ADMIN_KEY used by the deployed app]`
+- **Administrator key:** *(unique value set — see the submitted Word document; deliberately not recorded here since this repository is public)*
 
 Do not include a production secret in the document. Use a dedicated demonstration key for marking.
 
@@ -110,7 +110,7 @@ For the final submission, describe the configured admin key without exposing a p
 
 The application is deployed on Streamlit Community Cloud, connected to the GitHub repository `johnkeypathedu-pixel/movie-recommender` on the `main` branch with entrypoint `src/app.py`, while `requirements.txt` (Streamlit, pandas, NumPy, scikit-learn, Plotly, requests) is kept at the repository root as Streamlit Cloud requires. Deployment secrets (`ADMIN_KEY` and `MRS_DB`) are configured in the app's Secrets panel rather than committed to the repository; `MRS_DB` points the app at a writable runtime copy of the SQLite database (`/tmp/mrs.db`), seeded on first boot from the committed `data/mrs.db`, since Streamlit Cloud's filesystem is read-only outside `/tmp`. During debugging, the deployed app was crashing with a generic "Error running app" whenever a user opened Search & rate or the Dashboard; the server logs showed a clean boot with no Python traceback, which pointed to the container being killed for exceeding its memory limit rather than a code exception. Profiling `RecommendationEngine.refresh()` locally confirmed this: it was eagerly building two dense 9,742 × 9,742 item-similarity matrices (content-based and collaborative) over the full MovieLens catalogue, peaking at over 2.1 GiB of RAM in a single call. The engine was refactored to compute similarity one row at a time, on demand, for only the handful of movies a given user has actually rated, which dropped peak memory to about 11 MiB with identical recommendation output, and the app was redeployed and re-verified end-to-end (sign-in, search, rating, dashboard charts, and the admin console) after the fix.
 
-**Known gap to close before submission:** the `ADMIN_KEY` secret is currently still set to the codebase's own fallback default (`admin-demo-key`), not a unique key — Task 2.3 asks for a unique administrator login key, so this should be rotated to something unique in the app's Secrets settings before final submission.
+The `ADMIN_KEY` secret has been rotated from the codebase's fallback default to a unique production value, confirmed working against the live app. The value itself is recorded only in the submitted Word document and Streamlit's encrypted secrets store, not in this public repository.
 
 ## 4. Testing evidence
 
