@@ -1,0 +1,9 @@
+# Local secrets and environments
+.streamlit/secrets.toml
+.venv/
+__pycache__/
+*.pyc
+
+# SQLite runtime sidecar files
+data/*.db-shm
+data/*.db-wal

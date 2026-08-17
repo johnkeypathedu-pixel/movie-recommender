@@ -1,0 +1,5 @@
+[seed] resetting schema at C:\Users\keypather\OneDrive - Keypath Education Australia Pty. Ltd\Desktop\WorkBuddy\A3_MRS\data\mrs.db
+[seed] creating demo accounts
+        admin uid=1
+        demo uids={'alice': 2, 'bob': 3, 'charlie': 4, 'dana': 5, 'evan': 6}
+[seed] loading movies
