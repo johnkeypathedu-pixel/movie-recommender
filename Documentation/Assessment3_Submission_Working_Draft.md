@@ -3,7 +3,7 @@
 
 **Student:** [Insert name]  
 **Student ID:** [Insert student ID]  
-**Deployed application URL:** [Insert public Streamlit URL]
+**Deployed application URL:** https://movie-recommender-john-loh.streamlit.app/
 
 ## 1. System overview
 
@@ -106,9 +106,11 @@ For the final submission, describe the configured admin key without exposing a p
 
 ### Task 2.4 — Streamlit deployment
 
-**Deployed application URL:** [Insert publicly accessible URL]
+**Deployed application URL:** https://movie-recommender-john-loh.streamlit.app/
 
-The application will be deployed to a Streamlit-compatible hosting platform. The repository will contain `src/app.py`, the database and seed data required for the demonstration, and `requirements.txt` listing Streamlit, pandas, NumPy, scikit-learn, Plotly, and requests. The `ADMIN_KEY` will be configured as a deployment secret rather than hard-coded into the public repository. After deployment, the public URL will be tested in a private browser window to confirm that the application is accessible without local files.
+The application is deployed on Streamlit Community Cloud, connected to the GitHub repository `johnkeypathedu-pixel/movie-recommender` on the `main` branch with entrypoint `src/app.py`, while `requirements.txt` (Streamlit, pandas, NumPy, scikit-learn, Plotly, requests) is kept at the repository root as Streamlit Cloud requires. Deployment secrets (`ADMIN_KEY` and `MRS_DB`) are configured in the app's Secrets panel rather than committed to the repository; `MRS_DB` points the app at a writable runtime copy of the SQLite database (`/tmp/mrs.db`), seeded on first boot from the committed `data/mrs.db`, since Streamlit Cloud's filesystem is read-only outside `/tmp`. During debugging, the deployed app was crashing with a generic "Error running app" whenever a user opened Search & rate or the Dashboard; the server logs showed a clean boot with no Python traceback, which pointed to the container being killed for exceeding its memory limit rather than a code exception. Profiling `RecommendationEngine.refresh()` locally confirmed this: it was eagerly building two dense 9,742 × 9,742 item-similarity matrices (content-based and collaborative) over the full MovieLens catalogue, peaking at over 2.1 GiB of RAM in a single call. The engine was refactored to compute similarity one row at a time, on demand, for only the handful of movies a given user has actually rated, which dropped peak memory to about 11 MiB with identical recommendation output, and the app was redeployed and re-verified end-to-end (sign-in, search, rating, dashboard charts, and the admin console) after the fix.
+
+**Known gap to close before submission:** the `ADMIN_KEY` secret is currently still set to the codebase's own fallback default (`admin-demo-key`), not a unique key — Task 2.3 asks for a unique administrator login key, so this should be rotated to something unique in the app's Secrets settings before final submission.
 
 ## 4. Testing evidence
 
@@ -137,7 +139,7 @@ The interactive checks used a temporary writable database copy located outside O
 | Q2.1 search and rating | App plus manual screenshots | Screenshots required |
 | Q2.2 dashboard | App plus four dashboard screenshots | Screenshots required |
 | Q2.3 admin console | App plus admin-key, CRUD, and analytics screenshots | Screenshots required |
-| Q2.4 deployment | Public URL and deployment summary | Not started |
+| Q2.4 deployment | Public URL and deployment summary | Deployed and functionally verified end-to-end; needs a unique `ADMIN_KEY` before submission |
 
 ## 6. Source-code appendix
 
