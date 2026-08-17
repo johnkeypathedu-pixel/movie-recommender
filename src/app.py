@@ -1,4 +1,4 @@
-"""app.py — Streamlit front-end for the Movie Recommendation System.
+"""app.py — Streamlit front-end for Your Movie Pal.
 
 Run locally::
 
@@ -24,11 +24,10 @@ import streamlit as st
 
 import database as db
 import recommender as rec
-
 # ---------- config & bootstrap ----------
 
 st.set_page_config(
-    page_title="Movie Recommendation System",
+    page_title="Your Movie Pal",
     page_icon="🎬",
     layout="wide",
 )
@@ -97,7 +96,7 @@ def _ensure_engine() -> rec.RecommendationEngine:
 # ---------- sidebar ----------
 
 def render_sidebar() -> None:
-    st.sidebar.title("🎬 MRS")
+    st.sidebar.title("🎬 Your Movie Pal")
     user = st.session_state.logged_in_user
     if user:
         role = user["role"]
@@ -114,9 +113,10 @@ def render_sidebar() -> None:
     st.sidebar.divider()
     pages = ["Sign in"]
     if user:
-        pages += ["Search & rate", "User dashboard"]
         if st.session_state.is_admin:
             pages += ["Admin console"]
+        else:
+            pages += ["Search & rate", "User dashboard"]
     # If the previously requested page (e.g. "Search & rate") is no longer in
     # the options (e.g. after sign-out), fall back to the first one.
     if st.session_state.page not in pages:
@@ -131,8 +131,7 @@ def render_sidebar() -> None:
 # ---------- pages ----------
 
 def page_signin() -> None:
-    st.title("🎬 Movie Recommendation System")
-    st.caption("Streamlit prototype · MovieLens 'small' catalogue · hybrid recommender")
+    st.title("🎬 Your Movie Pal")
 
     tab_signin, tab_register = st.tabs(["Sign in", "Register a new account"])
 
@@ -159,21 +158,6 @@ def page_signin() -> None:
                 st.session_state.page = target_page
                 st.success(f"Welcome back, {user['display_name']}.")
                 st.rerun()
-
-        st.divider()
-        with st.expander("Demo accounts (provided in the brief)"):
-            st.markdown(
-                """
-| Username | Password     | Role |
-|----------|--------------|------|
-| alice    | `Demo1234!`  | User |
-| bob      | `Demo1234!`  | User |
-| charlie  | `Demo1234!`  | User |
-| dana     | `Demo1234!`  | User |
-| evan     | `Demo1234!`  | User |
-| admin    | `AdminPass!23` | Admin |
-"""
-            )
 
     with tab_register:
         st.subheader("Register")
@@ -209,7 +193,6 @@ def page_search() -> None:
         st.warning("Please sign in to rate movies and personalise recommendations.")
         st.stop()
     st.title("🔍 Search & rate")
-    st.caption("Find a movie, rate it, and watch the recommender adapt in real time.")
 
     eng = _ensure_engine()
 
@@ -247,16 +230,12 @@ def page_search() -> None:
             cols2 = st.columns([2, 1])
             with cols2[0]:
                 score = st.slider("Your rating", 0.5, 5.0, value=4.0, step=0.5)
-            with cols2[1]:
-                completion = st.slider(
-                    "Watch % (also recorded to history)",
-                    0.0, 1.0, value=1.0, step=0.1,
-                )
             submit = st.form_submit_button("Save rating")
             if submit:
                 db.add_rating(user["user_id"], movie["movie_id"], score)
-                if completion > 0:
-                    db.add_watch_event(user["user_id"], movie["movie_id"], completion)
+                # A rating indicates that the user watched the movie; record a
+                # completed viewing event without exposing a watch-percentage control.
+                db.add_watch_event(user["user_id"], movie["movie_id"], 1.0)
                 rec.reset_engine()
                 st.session_state.engine_built = False
                 _ensure_engine()
@@ -277,8 +256,7 @@ def page_search() -> None:
             with cols3[i % 2]:
                 st.markdown(
                     f"**{r['title']}**  \n"
-                    f"_{r['genres'].replace('|', ' · ')}_  \n"
-                    f"score: `{r['final_score']:.2f}` · {r['rationale']}"
+                    f"_{r['genres'].replace('|', ' · ')}_"
                 )
 
 
@@ -289,34 +267,19 @@ def page_dashboard() -> None:
         st.stop()
 
     st.title(f"👋 Hello, {user['display_name']}")
-    st.caption("Your personalised dashboard · refreshes after every rating.")
 
     eng = _ensure_engine()
 
-    # ---- top recommendations + preference vector ----
+    # ---- top recommendations ----
     st.subheader("Top picks for you")
     recs = eng.generate_recommendations(user["user_id"], k=10)
     if recs:
-        # Bar chart of top-10 scores
-        df = pd.DataFrame(recs)
-        fig = px.bar(
-            df.sort_values("final_score", ascending=True),
-            x="final_score",
-            y="title",
-            orientation="h",
-            color="cf_score",
-            color_continuous_scale="Blues",
-            labels={"final_score": "Hybrid score", "cf_score": "Collaborative", "title": "Movie"},
-            title="Top 10 recommendations (bar length = hybrid score, colour = collaborative signal)",
+        st.markdown(
+            "\n".join(
+                f"{i}. **{r['title']}** — _{r['genres'].replace('|', ' · ')}_"
+                for i, r in enumerate(recs, start=1)
+            )
         )
-        fig.update_layout(height=420)
-        st.plotly_chart(fig, use_container_width=True)
-        with st.expander("Why these? See rationale per movie"):
-            for r in recs:
-                st.markdown(
-                    f"- **{r['title']}** _(gen: {r['genres'].replace('|', ' · ')})_ — "
-                    f"score `{r['final_score']:.2f}` — {r['rationale']}"
-                )
     else:
         st.info("Rate a few movies to start receiving personal recommendations.")
 
@@ -349,10 +312,8 @@ def page_dashboard() -> None:
                 x="movie_count",
                 y="genre",
                 orientation="h",
-                title="Popular genres (by number of rated movies)",
-                labels={"movie_count": "Movies", "genre": "Genre"},
-                color="movie_count",
-                color_continuous_scale="Viridis",
+                title="Popular genres",
+                labels={"movie_count": "", "genre": "Genre"},
             )
             fig3.update_layout(height=320, showlegend=False)
             st.plotly_chart(fig3, use_container_width=True)
@@ -365,9 +326,8 @@ def page_dashboard() -> None:
             df = pd.DataFrame(hist)
             df["completion_pct"] = (df["completion_pct"] * 100).round(1)
             st.dataframe(
-                df[["title", "completion_pct", "watched_at", "device"]].rename(
+                df[["title", "watched_at", "device"]].rename(
                     columns={
-                        "completion_pct": "% watched",
                         "watched_at": "When",
                         "device": "Device",
                     }
@@ -392,31 +352,6 @@ def page_dashboard() -> None:
             )
         else:
             st.caption("No ratings yet — head to **Search & rate** to begin.")
-
-    st.divider()
-
-    # ---- preference vector ----
-    st.subheader("Your inferred preference vector")
-    pref = eng.get_user_preference(user["user_id"])
-    if pref.genre_weights:
-        df = pd.DataFrame(
-            [{"genre": g, "weight": w} for g, w in pref.genre_weights.items()]
-        ).sort_values("weight", ascending=False)
-        fig4 = px.bar(
-            df.head(10).sort_values("weight", ascending=True),
-            x="weight",
-            y="genre",
-            orientation="h",
-            title="Top 10 weighted genres (built from your ratings)",
-            labels={"weight": "Weight", "genre": "Genre"},
-            color="weight",
-            color_continuous_scale="Oranges",
-        )
-        fig4.update_layout(height=320, showlegend=False)
-        st.plotly_chart(fig4, use_container_width=True)
-    else:
-        st.caption("Rate a few movies to see your preference vector.")
-
 
 # ---------- admin ----------
 
@@ -564,7 +499,6 @@ def page_admin() -> None:
             st.info("Not enough data yet.")
 
         st.divider()
-        st.markdown("**Top-watched movies overall**")
         rows = db.most_watched_movies(limit=10, days=None)
         if rows:
             df = pd.DataFrame(rows)
@@ -579,7 +513,6 @@ def page_admin() -> None:
             )
             st.plotly_chart(fig, use_container_width=True)
 
-        st.markdown("**Genre popularity**")
         rows = db.genre_popularity()
         if rows:
             df = pd.DataFrame(rows).head(15)
@@ -588,9 +521,7 @@ def page_admin() -> None:
                 x="movie_count", y="genre",
                 orientation="h",
                 title="Number of rated movies per genre",
-                labels={"movie_count": "Movies", "genre": "Genre"},
-                color="movie_count",
-                color_continuous_scale="Plasma",
+                labels={"movie_count": "", "genre": "Genre"},
             )
             st.plotly_chart(fig, use_container_width=True)
 

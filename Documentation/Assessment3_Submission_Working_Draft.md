@@ -41,6 +41,16 @@ For users with limited ratings, the system uses content-based filtering by compa
 
 The application is implemented as a Streamlit GUI. The sidebar provides navigation between Sign in, Search & rate, User dashboard, and Admin console. User data and catalogue data are stored in SQLite, while pandas and Plotly support dashboard analysis.
 
+### Demonstration login credentials
+
+Include these credentials in the final submission so the lecturer can test the application:
+
+- **User account:** username `alice`, password `Demo1234!`
+- **Administrator account:** username `admin`, password `AdminPass!23`
+- **Administrator key:** `[Insert the demonstration ADMIN_KEY used by the deployed app]`
+
+Do not include a production secret in the document. Use a dedicated demonstration key for marking.
+
 ### Task 2.1 — Search, rating, and recommendations
 
 The Search & rate page allows a signed-in user to:
